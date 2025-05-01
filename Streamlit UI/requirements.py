@@ -1,0 +1,3 @@
+google-generativeai==0.3.2
+streamlit
+fpdf
