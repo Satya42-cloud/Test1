@@ -1,3 +1,0 @@
-google.generativeai as genai
-streamlit
-fpdf
