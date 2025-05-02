@@ -16,7 +16,7 @@ df = load_data()
 st.markdown("""
     <style>
     .stApp {
-        background: linear-gradient(to right, #f0f8ff, #e1f5fe);
+        background: #f5deb3;  /* wheat color */
         background-attachment: fixed;
         height: 100vh;
         padding-top: 0 !important;
@@ -54,6 +54,7 @@ st.markdown("""
     }
     </style>
 """, unsafe_allow_html=True)
+
 
 # ---- Authentication ----
 def login():
