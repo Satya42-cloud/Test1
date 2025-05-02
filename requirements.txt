@@ -1,4 +1,4 @@
-streamlit==1.17.0
-pandas==1.5.3
-yagmail==0.15.258
-reportlab==3.6.0
+streamlit
+pandas
+yagmail
+reportlab
