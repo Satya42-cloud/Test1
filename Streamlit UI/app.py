@@ -16,7 +16,7 @@ df = load_data()
 st.markdown("""
     <style>
     .stApp {
-        background: #f5deb3;  /* wheat color */
+        background: #fdf5e6;  /* light wheat */
         background-attachment: fixed;
         height: 100vh;
         padding-top: 0 !important;
@@ -35,13 +35,6 @@ st.markdown("""
         border-radius: 8px;
         padding: 10px;
     }
-    .stButton > button {
-        background-color: #009688;
-        color: white;
-        font-weight: bold;
-        border-radius: 8px;
-        padding: 12px 25px;
-    }
     header {visibility: hidden;}
     .stApp > header {visibility: hidden;}
     .css-1v0mbdj {display: none;}
@@ -52,8 +45,14 @@ st.markdown("""
         margin-top: 30px;
         margin-bottom: 30px;
     }
+    /* Highlight selected buttons only */
+    button:has(span:contains("Selected ✅")) {
+        background-color: #4CAF50 !important;
+        color: white !important;
+    }
     </style>
 """, unsafe_allow_html=True)
+
 
 
 # ---- Authentication ----
