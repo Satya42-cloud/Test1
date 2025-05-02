@@ -1,108 +1,128 @@
-# streamlit_app.py
-
 import streamlit as st
-import google.generativeai as genai
-from fpdf import FPDF
+import pandas as pd
+import yagmail
+import os
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
 
-# Configure your Gemini API key (use your own key here)
-genai.configure(api_key="AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA")  # Replace with your actual Gemini API key
+# Load internal dataset
+@st.cache_data
+def load_data():
+    return pd.read_csv("C:\\Users\\sswain_quantum-i\\Downloads\\Shortlisted Vendor.csv")
 
-# Initialize the Gemini Pro model
-model = genai.GenerativeModel("gemma-3-27b-it")
+df = load_data()
 
-# Define agents
-class IndustryResearcherAgent:
-    def __init__(self, model):
-        self.model = model
+# Authentication
+def login():
+    st.title("Procurement Login")
+    username = st.text_input("Username")
+    password = st.text_input("Password", type="password")
+    if st.button("Login"):
+        if username == "admin" and password == "password":
+            st.session_state.logged_in = True
+        else:
+            st.error("Invalid credentials")
 
-    def run(self, company_name):
-        prompt = f"""
-        You are an expert industry analyst. Conduct a detailed analysis of the {company_name} industry,
-        focusing on current market trends, competitors, key offerings, and strategic opportunities.
-        Include insights on high-growth areas, technological advancements, and unique positioning in the market.
-        """
-        response = self.model.generate_content(prompt)
-        return response.text
+# Session state
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+if "selected_vendors" not in st.session_state:
+    st.session_state.selected_vendors = {}
+if "show_report" not in st.session_state:
+    st.session_state.show_report = False
 
-class AIUseCaseStrategistAgent:
-    def __init__(self, model):
-        self.model = model
+# Generate PDF contract
+def generate_pdf(vendor_name, route_id):
+    file_name = f"contract_{vendor_name}_{route_id}.pdf"
+    c = canvas.Canvas(file_name, pagesize=A4)
+    text = f"""
+    Contract Award Notice
 
-    def run(self, company_name):
-        prompt = f"""
-        As an AI strategy consultant, research current and emerging trends in AI and ML for the {company_name} industry.
-        Suggest innovative and practical use cases for AI that can provide competitive advantages. Focus on use cases
-        that improve efficiency, scalability, and ROI. Include examples of successful AI implementations in similar domains.
-        """
-        response = self.model.generate_content(prompt)
-        return response.text
+    Dear {vendor_name},
 
-class ResourceCollectorAgent:
-    def __init__(self, model):
-        self.model = model
+    Congratulations! You have been selected as the preferred vendor for Route {route_id}.
+    Please find the contract terms enclosed.
 
-    def run(self, company_name):
-        prompt = f"""
-        As an AI resource specialist, identify and compile a curated list of relevant datasets, tools, and libraries
-        for implementing AI solutions within the {company_name} industry. Ensure that resources are practical and
-        scalable for real-world applications.
-        """
-        response = self.model.generate_content(prompt)
-        return response.text
+    Regards,
+    Procurement Team
+    """
+    for i, line in enumerate(text.strip().split("\n")):
+        c.drawString(100, 800 - i*20, line.strip())
+    c.save()
+    return file_name
 
-# PDF generator
-def generate_pdf(company_name, insights, use_cases, resources):
-    pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Arial", size=12)
+# Send email with attachment
+def send_email(recipient_email, vendor_name, route_id, pdf_file):
+    try:
+        yag = yagmail.SMTP("your_email@gmail.com", "your_app_password")  # Use app password if Gmail
+        subject = f"Contract Award for Route {route_id}"
+        body = f"Dear {vendor_name},\n\nCongratulations! You have been selected for Route {route_id}.\nPlease find the contract attached.\n\nRegards,\nProcurement Team"
+        yag.send(to=recipient_email, subject=subject, contents=body, attachments=pdf_file)
+    except Exception as e:
+        st.error(f"Error sending email to {recipient_email}: {e}")
 
-    pdf.multi_cell(0, 10, f"AI Insights for {company_name}\n\n")
+# Main app
+if not st.session_state.logged_in:
+    login()
+else:
+    st.title("Procurement Manager Dashboard")
 
-    pdf.set_font("Arial", "B", 12)
-    pdf.multi_cell(0, 10, "📊 Industry Research")
-    pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, insights + "\n")
+    if st.button("📊 View Report"):
+        st.session_state.show_report = True
 
-    pdf.set_font("Arial", "B", 12)
-    pdf.multi_cell(0, 10, "🤖 AI Use Case Suggestions")
-    pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, use_cases + "\n")
+    if st.session_state.show_report:
+        route_options = sorted(df["Route ID"].unique().tolist())
+        selected_routes = st.multiselect("Select Route(s):", route_options)
 
-    pdf.set_font("Arial", "B", 12)
-    pdf.multi_cell(0, 10, "📚 AI Resources")
-    pdf.set_font("Arial", size=12)
-    pdf.multi_cell(0, 10, resources + "\n")
+        if selected_routes:
+            filtered_df = df[df["Route ID"].isin(selected_routes)]
 
-    file_path = f"{company_name}_AI_Report.pdf"
-    pdf.output(file_path)
-    return file_path
+            for route_id in selected_routes:
+                st.subheader(f"Route {route_id}")
+                route_df = filtered_df[filtered_df["Route ID"] == route_id]
 
-# Streamlit UI
-st.set_page_config(page_title="AI Research Assistant", layout="centered")
-st.title("🔍 AI Industry Insight Generator")
+                for idx, row in route_df.iterrows():
+                    cols = st.columns([3, 3, 2, 2, 2])
+                    cols[0].markdown(f"**{row['Vendor Name']}**")
+                    cols[1].markdown(f"Quoted Cost: ₹{row['Total Quoted Cost']}")
+                    cols[2].markdown(f"Rank: {row['Rank']}")
 
-company_name = st.text_input("Enter a Company or Industry Name")
+                    selected = st.session_state.selected_vendors.get(route_id)
+                    if selected == row["Vendor ID"]:
+                        cols[3].button("Selected ✅", key=f"sel_{route_id}_{idx}", disabled=True)
+                    elif selected is not None:
+                        cols[3].button("Rejected ❌", key=f"rej_{route_id}_{idx}", disabled=True)
+                    else:
+                        if cols[3].button("Select", key=f"btn_{route_id}_{idx}"):
+                            st.session_state.selected_vendors[route_id] = row["Vendor ID"]
+                            st.experimental_rerun()
 
-if st.button("Generate Insights") and company_name:
-    with st.spinner("Running AI agents..."):
-        industry_agent = IndustryResearcherAgent(model)
-        use_case_agent = AIUseCaseStrategistAgent(model)
-        resource_agent = ResourceCollectorAgent(model)
+            if all(route in st.session_state.selected_vendors for route in selected_routes):
+                st.success("✅ All routes have selected vendors.")
 
-        industry_insights = industry_agent.run(company_name)
-        use_cases = use_case_agent.run(company_name)
-        resources = resource_agent.run(company_name)
+                with st.expander("📄 Preview Contracts"):
+                    for route_id in selected_routes:
+                        vendor_id = st.session_state.selected_vendors[route_id]
+                        vendor_row = df[(df["Route ID"] == route_id) & (df["Vendor ID"] == vendor_id)].iloc[0]
+                        st.markdown(f"""
+                        **To:** {vendor_row['Vendor Name']}
+                        **Email:** {vendor_row['Vendor Email']}
+                        **Subject:** Contract Award for Route {route_id}
 
-        st.subheader("📊 Industry Insights")
-        st.write(industry_insights)
+                        Dear {vendor_row['Vendor Name']},
+                        Congratulations! You have been selected as the preferred vendor for **Route {route_id}**.
+                        Please review and acknowledge the attached contract terms.
 
-        st.subheader("🤖 AI Use Case Ideas")
-        st.write(use_cases)
+                        Regards,
+                        Procurement Team
+                        """)
 
-        st.subheader("📚 Resources")
-        st.write(resources)
+                if st.button("📨 Send Contracts"):
+                    for route_id in selected_routes:
+                        vendor_id = st.session_state.selected_vendors[route_id]
+                        vendor_row = df[(df["Route ID"] == route_id) & (df["Vendor ID"] == vendor_id)].iloc[0]
+                        pdf_path = generate_pdf(vendor_row['Vendor Name'], route_id)
+                        send_email(vendor_row["Vendor Email"], vendor_row["Vendor Name"], route_id, pdf_path)
+                        os.remove(pdf_path)  # Clean up after sending
 
-        pdf_path = generate_pdf(company_name, industry_insights, use_cases, resources)
-
-        with open(pdf_path, "rb") as file:
-            st.download_button("📥 Download Report as PDF", file, file_name=pdf_path)
+                    st.success("📬 All contracts sent successfully!")
