@@ -9,7 +9,7 @@ from reportlab.pdfgen import canvas
 @st.cache_data
 def load_data():
     # Replace with your dataset file or path
-    return pd.read_csv("https://raw.githubusercontent.com/Satya42-cloud/Test1/refs/heads/main/Shortlisted%20Vendor.csv")
+    return pd.read_csv("top_vendors.csv")
 
 df = load_data()
 
@@ -98,7 +98,6 @@ else:
                     else:
                         if cols[3].button("Select", key=f"btn_{route_id}_{idx}"):
                             st.session_state.draft_selections[route_id] = row["Vendor ID"]
-                            st.experimental_rerun()
 
             # Check if all routes have vendor selections
             if all(route in st.session_state.draft_selections for route in selected_routes):
