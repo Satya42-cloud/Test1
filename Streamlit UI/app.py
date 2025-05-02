@@ -9,7 +9,7 @@ from reportlab.pdfgen import canvas
 @st.cache_data
 def load_data():
     # Replace with your dataset file or path
-    return pd.read_csv("top_vendors.csv")
+    return pd.read_csv("https://raw.githubusercontent.com/Satya42-cloud/Test1/refs/heads/main/Shortlisted%20Vendor.csv")
 
 df = load_data()
 
