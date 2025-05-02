@@ -2,30 +2,10 @@ import streamlit as st
 import pandas as pd
 import yagmail
 import os
-import base64
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-# ---- Background Styling ----
-def set_background(image_path):
-    with open(image_path, "rb") as image_file:
-        encoded_string = base64.b64encode(image_file.read()).decode()
-    background_css = f"""
-    <style>
-    .stApp {{
-        background-image: url("data:image/png;base64,{encoded_string}");
-        background-size: cover;
-        background-position: center;
-        background-repeat: no-repeat;
-    }}
-    </style>
-    """
-    st.markdown(background_css, unsafe_allow_html=True)
-
-# Set your image path (make sure the image is in the same folder or use full path)
-set_background("background.jpg")  # ← Replace with your image file
-
-# ---- Load Dataset ----
+# ---- Load the dataset from GitHub URL ----
 @st.cache_data
 def load_data():
     url = "https://raw.githubusercontent.com/Satya42-cloud/Test1/refs/heads/main/Shortlisted%20Vendor.csv"
@@ -44,7 +24,7 @@ def login():
         else:
             st.error("Invalid credentials")
 
-# ---- Session State ----
+# ---- Session state initialization ----
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "selected_vendors" not in st.session_state:
@@ -54,7 +34,7 @@ if "show_report" not in st.session_state:
 if "draft_selections" not in st.session_state:
     st.session_state.draft_selections = {}
 
-# ---- PDF Generator ----
+# ---- Generate PDF contract ----
 def generate_pdf(vendor_name, routes):
     file_name = f"contract_{vendor_name}.pdf"
     c = canvas.Canvas(file_name, pagesize=A4)
@@ -72,21 +52,21 @@ def generate_pdf(vendor_name, routes):
     Procurement Team
     """
     for i, line in enumerate(text.strip().split("\n")):
-        c.drawString(100, 800 - i * 20, line.strip())
+        c.drawString(100, 800 - i*20, line.strip())
     c.save()
     return file_name
 
-# ---- Email Sender ----
+# ---- Send email with attachment ----
 def send_email(recipient_email, vendor_name, routes, pdf_file):
     try:
-        yag = yagmail.SMTP("harikaankathi7@gmail.com", "vpkczaiwjrmgdmvv")  # Use your Gmail App Password
+        yag = yagmail.SMTP("harikaankathi7@gmail.com", "vpkczaiwjrmgdmvv")  # Use your Gmail credentials
         subject = f"Contract Award for Routes {', '.join(routes)}"
         body = f"Dear {vendor_name},\n\nCongratulations! You have been selected for the following routes: {', '.join(routes)}.\nPlease find the contract attached.\n\nRegards,\nProcurement Team"
         yag.send(to=recipient_email, subject=subject, contents=body, attachments=pdf_file)
     except Exception as e:
         st.error(f"Error sending email to {recipient_email}: {e}")
 
-# ---- Main App ----
+# ---- Main app flow ----
 if not st.session_state.logged_in:
     login()
 else:
@@ -112,29 +92,49 @@ else:
                     cols[1].markdown(f"Quoted Cost: ₹{row['Total Quoted Cost']}")
                     cols[2].markdown(f"Rank: {row['Rank']}")
 
-                    if route_id in st.session_state.draft_selections and st.session_state.draft_selections[route_id] == row["Vendor ID"]:
-                        cols[3].button("Selected ✅", key=f"draft_{route_id}_{idx}", disabled=False)
+                    # Button color and state logic
+                    vendor_key = f"{route_id}_{row['Vendor ID']}"
+                    selected = st.session_state.draft_selections.get(route_id) == row["Vendor ID"]
+                    rejected = vendor_key in st.session_state.draft_selections and st.session_state.draft_selections[route_id] == "rejected"
+
+                    if selected:
+                        if cols[3].button("Selected ✅", key=f"sel_{vendor_key}"):
+                            st.session_state.draft_selections[route_id] = "rejected"
+                    elif rejected:
+                        if cols[4].button("Rejected ❌", key=f"rej_{vendor_key}"):
+                            del st.session_state.draft_selections[route_id]
                     else:
-                        if cols[3].button("Select", key=f"btn_{route_id}_{idx}"):
+                        if cols[3].button("Select", key=f"btn_{vendor_key}"):
                             st.session_state.draft_selections[route_id] = row["Vendor ID"]
 
-            if all(route in st.session_state.draft_selections for route in selected_routes):
+            # Only proceed if all selected_routes have vendor selections (not rejected)
+            valid_selections = {
+                r: v for r, v in st.session_state.draft_selections.items()
+                if v != "rejected"
+            }
+
+            if all(r in valid_selections for r in selected_routes):
                 st.success("✅ All routes have selected vendors.")
-                st.session_state.selected_vendors = st.session_state.draft_selections.copy()
+                st.session_state.selected_vendors = valid_selections.copy()
 
                 with st.expander("📄 Preview Contracts"):
                     vendors_to_send = {}
                     for route_id in selected_routes:
                         vendor_id = st.session_state.selected_vendors[route_id]
                         vendor_row = df[(df["Route ID"] == route_id) & (df["Vendor ID"] == vendor_id)].iloc[0]
+
                         if vendor_id not in vendors_to_send:
-                            vendors_to_send[vendor_id] = {"vendor_name": vendor_row["Vendor Name"], "email": vendor_row["Vendor Email"], "routes": []}
+                            vendors_to_send[vendor_id] = {
+                                "vendor_name": vendor_row["Vendor Name"],
+                                "email": vendor_row["Vendor Email"],
+                                "routes": []
+                            }
                         vendors_to_send[vendor_id]["routes"].append(route_id)
 
-                    for vendor_id, info in vendors_to_send.items():
-                        vendor_name = info["vendor_name"]
-                        email = info["email"]
-                        routes = info["routes"]
+                    for vendor_id, vendor_info in vendors_to_send.items():
+                        vendor_name = vendor_info["vendor_name"]
+                        email = vendor_info["email"]
+                        routes = vendor_info["routes"]
 
                         st.markdown(f"""
                         **To:** {vendor_name}  
@@ -150,11 +150,13 @@ else:
                         """)
 
                 if st.button("📨 Send Contracts"):
-                    for vendor_id, info in vendors_to_send.items():
-                        vendor_name = info["vendor_name"]
-                        email = info["email"]
-                        routes = info["routes"]
+                    for vendor_id, vendor_info in vendors_to_send.items():
+                        vendor_name = vendor_info["vendor_name"]
+                        email = vendor_info["email"]
+                        routes = vendor_info["routes"]
+
                         pdf_path = generate_pdf(vendor_name, routes)
                         send_email(email, vendor_name, routes, pdf_path)
                         os.remove(pdf_path)
+
                     st.success("📬 All contracts sent successfully!")
