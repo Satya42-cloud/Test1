@@ -59,7 +59,7 @@ def generate_pdf(vendor_name, routes):
 # ---- Send email with attachment ----
 def send_email(recipient_email, vendor_name, routes, pdf_file):
     try:
-        yag = yagmail.SMTP("your_email@gmail.com", "your_app_password")  # Use your Gmail credentials
+        yag = yagmail.SMTP("harikaankathi7@gmail.com", "vpkczaiwjrmgdmvv")  # Use your Gmail credentials
         subject = f"Contract Award for Routes {', '.join(routes)}"
         body = f"Dear {vendor_name},\n\nCongratulations! You have been selected for the following routes: {', '.join(routes)}.\nPlease find the contract attached.\n\nRegards,\nProcurement Team"
         yag.send(to=recipient_email, subject=subject, contents=body, attachments=pdf_file)
