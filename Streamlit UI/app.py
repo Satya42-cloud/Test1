@@ -12,6 +12,48 @@ def load_data():
     return pd.read_csv(url)
 
 df = load_data()
+# ------------------ STYLING ------------------
+st.markdown("""
+    <style>
+    .stApp {
+        background: linear-gradient(to right, #f0f8ff, #e1f5fe);
+        background-attachment: fixed;
+        height: 100vh;
+        padding-top: 0 !important;
+        margin-top: -60px;
+    }
+    .main {
+        background-color: rgba(255, 255, 255, 0.95);
+        padding: 2rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin-top: 40px;
+    }
+    .stTextInput > div > div > input,
+    .stSelectbox > div > div > div > select,
+    .stMultiSelect > div > div > div > select {
+        border-radius: 8px;
+        padding: 10px;
+    }
+    .stButton > button {
+        background-color: #009688;
+        color: white;
+        font-weight: bold;
+        border-radius: 8px;
+        padding: 12px 25px;
+    }
+    header {visibility: hidden;}
+    .stApp > header {visibility: hidden;}
+    .css-1v0mbdj {display: none;}
+    .st-bm {padding-top: 0;}
+    .center-img {
+        display: flex;
+        justify-content: center;
+        margin-top: 30px;
+        margin-bottom: 30px;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # ---- Authentication ----
 def login():
