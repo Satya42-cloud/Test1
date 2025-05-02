@@ -115,13 +115,19 @@ else:
                             vendors_to_send[vendor_id] = {"vendor_name": vendor_row["Vendor Name"], "email": vendor_row["Vendor Email"], "routes": []}
                         vendors_to_send[vendor_id]["routes"].append(route_id)
 
-                        st.markdown(f"""
-                        **To:** {vendor_row['Vendor Name']}  
-                        **Email:** {vendor_row['Vendor Email']}  
-                        **Subject:** Contract Award for Route {route_id}  
+                    # Show the grouped contracts for each vendor
+                    for vendor_id, vendor_info in vendors_to_send.items():
+                        vendor_name = vendor_info["vendor_name"]
+                        email = vendor_info["email"]
+                        routes = vendor_info["routes"]
 
-                        Dear {vendor_row['Vendor Name']}  
-                        Congratulations! You have been selected as the preferred vendor for **Route {route_id}**.  
+                        st.markdown(f"""
+                        **To:** {vendor_name}  
+                        **Email:** {email}  
+                        **Subject:** Contract Award for Routes {', '.join(routes)}  
+
+                        Dear {vendor_name},  
+                        Congratulations! You have been selected as the preferred vendor for the following routes: {', '.join(routes)}.  
                         Please review and acknowledge the attached contract terms.
 
                         Regards,  
