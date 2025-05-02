@@ -2,10 +2,30 @@ import streamlit as st
 import pandas as pd
 import yagmail
 import os
+import base64
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
 
-# ---- Load the dataset from GitHub URL ----
+# ---- Background Styling ----
+def set_background(image_path):
+    with open(image_path, "rb") as image_file:
+        encoded_string = base64.b64encode(image_file.read()).decode()
+    background_css = f"""
+    <style>
+    .stApp {{
+        background-image: url("data:image/png;base64,{encoded_string}");
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }}
+    </style>
+    """
+    st.markdown(background_css, unsafe_allow_html=True)
+
+# Set your image path (make sure the image is in the same folder or use full path)
+set_background("background.jpg")  # ← Replace with your image file
+
+# ---- Load Dataset ----
 @st.cache_data
 def load_data():
     url = "https://raw.githubusercontent.com/Satya42-cloud/Test1/refs/heads/main/Shortlisted%20Vendor.csv"
@@ -24,7 +44,7 @@ def login():
         else:
             st.error("Invalid credentials")
 
-# ---- Session state initialization ----
+# ---- Session State ----
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
 if "selected_vendors" not in st.session_state:
@@ -34,7 +54,7 @@ if "show_report" not in st.session_state:
 if "draft_selections" not in st.session_state:
     st.session_state.draft_selections = {}
 
-# ---- Generate PDF contract ----
+# ---- PDF Generator ----
 def generate_pdf(vendor_name, routes):
     file_name = f"contract_{vendor_name}.pdf"
     c = canvas.Canvas(file_name, pagesize=A4)
@@ -52,21 +72,21 @@ def generate_pdf(vendor_name, routes):
     Procurement Team
     """
     for i, line in enumerate(text.strip().split("\n")):
-        c.drawString(100, 800 - i*20, line.strip())
+        c.drawString(100, 800 - i * 20, line.strip())
     c.save()
     return file_name
 
-# ---- Send email with attachment ----
+# ---- Email Sender ----
 def send_email(recipient_email, vendor_name, routes, pdf_file):
     try:
-        yag = yagmail.SMTP("harikaankathi7@gmail.com", "vpkczaiwjrmgdmvv")  # Use your Gmail credentials
+        yag = yagmail.SMTP("harikaankathi7@gmail.com", "vpkczaiwjrmgdmvv")  # Use your Gmail App Password
         subject = f"Contract Award for Routes {', '.join(routes)}"
         body = f"Dear {vendor_name},\n\nCongratulations! You have been selected for the following routes: {', '.join(routes)}.\nPlease find the contract attached.\n\nRegards,\nProcurement Team"
         yag.send(to=recipient_email, subject=subject, contents=body, attachments=pdf_file)
     except Exception as e:
         st.error(f"Error sending email to {recipient_email}: {e}")
 
-# ---- Main app flow ----
+# ---- Main App ----
 if not st.session_state.logged_in:
     login()
 else:
@@ -92,14 +112,12 @@ else:
                     cols[1].markdown(f"Quoted Cost: ₹{row['Total Quoted Cost']}")
                     cols[2].markdown(f"Rank: {row['Rank']}")
 
-                    # Draft Mode: Check if this vendor is in draft
                     if route_id in st.session_state.draft_selections and st.session_state.draft_selections[route_id] == row["Vendor ID"]:
                         cols[3].button("Selected ✅", key=f"draft_{route_id}_{idx}", disabled=False)
                     else:
                         if cols[3].button("Select", key=f"btn_{route_id}_{idx}"):
                             st.session_state.draft_selections[route_id] = row["Vendor ID"]
 
-            # Check if all routes have vendor selections
             if all(route in st.session_state.draft_selections for route in selected_routes):
                 st.success("✅ All routes have selected vendors.")
                 st.session_state.selected_vendors = st.session_state.draft_selections.copy()
@@ -109,17 +127,14 @@ else:
                     for route_id in selected_routes:
                         vendor_id = st.session_state.selected_vendors[route_id]
                         vendor_row = df[(df["Route ID"] == route_id) & (df["Vendor ID"] == vendor_id)].iloc[0]
-                        
-                        # Group routes by vendor
                         if vendor_id not in vendors_to_send:
                             vendors_to_send[vendor_id] = {"vendor_name": vendor_row["Vendor Name"], "email": vendor_row["Vendor Email"], "routes": []}
                         vendors_to_send[vendor_id]["routes"].append(route_id)
 
-                    # Show the grouped contracts for each vendor
-                    for vendor_id, vendor_info in vendors_to_send.items():
-                        vendor_name = vendor_info["vendor_name"]
-                        email = vendor_info["email"]
-                        routes = vendor_info["routes"]
+                    for vendor_id, info in vendors_to_send.items():
+                        vendor_name = info["vendor_name"]
+                        email = info["email"]
+                        routes = info["routes"]
 
                         st.markdown(f"""
                         **To:** {vendor_name}  
@@ -135,16 +150,11 @@ else:
                         """)
 
                 if st.button("📨 Send Contracts"):
-                    for vendor_id, vendor_info in vendors_to_send.items():
-                        vendor_name = vendor_info["vendor_name"]
-                        email = vendor_info["email"]
-                        routes = vendor_info["routes"]
-
-                        # Generate the PDF contract
+                    for vendor_id, info in vendors_to_send.items():
+                        vendor_name = info["vendor_name"]
+                        email = info["email"]
+                        routes = info["routes"]
                         pdf_path = generate_pdf(vendor_name, routes)
-
-                        # Send the email with the PDF attachment
                         send_email(email, vendor_name, routes, pdf_path)
-                        os.remove(pdf_path)  # Clean up after sending
-
+                        os.remove(pdf_path)
                     st.success("📬 All contracts sent successfully!")
