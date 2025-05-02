@@ -8,7 +8,7 @@ from reportlab.pdfgen import canvas
 # Load internal dataset
 @st.cache_data
 def load_data():
-    return pd.read_csv("C:\\Users\\sswain_quantum-i\\Downloads\\Shortlisted Vendor.csv")
+    return pd.read_csv("https://raw.githubusercontent.com/Satya42-cloud/Test1/refs/heads/main/Shortlisted%20Vendor.csv")
 
 df = load_data()
 
