@@ -1,8 +1,5 @@
-sounddevice
-numpy
-scipy
-google-generativeai
-openai-whisper
-faster-whisper
-SpeechRecognition
-pydub
+streamlit==1.32.2
+whisper==1.0.0
+google-generativeai==1.44.0
+sounddevice==0.4.4
+numpy==1.23.0
