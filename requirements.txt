@@ -1,8 +1,6 @@
-streamlit
-streamlit-webrtc
-whisper
-fpdf
-soundfile
-google-generativeai
+sounddevice
 numpy
-av
+scipy
+google-generativeai
+pydub
+
