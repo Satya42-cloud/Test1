@@ -1,115 +1,109 @@
-import streamlit as st
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
-import av
+import sounddevice as sd
 import numpy as np
-import whisper
-import tempfile
-from fpdf import FPDF
+import scipy.io.wavfile as wav
+import time
 import google.generativeai as genai
+from io import BytesIO
+from pydub import AudioSegment
 import os
 
-# Set up GenAI API key (replace with your key)
-genai.api_key = "AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA"
+# Set up Google Generative AI API key
+genai.configure(api_key="YOUR_GOOGLE_API_KEY")  # Replace with your API key
 
-st.set_page_config(page_title="Scribe AI", layout="centered")
-st.title("🩺 Scribe AI - Doctor-Patient Transcription")
+# Global variables to hold the audio recording data and control flags
+audio_data = None
+is_recording = False
+filename = "/content/audio_recording.wav"
 
-# Load Whisper model once
-@st.cache_resource
-def load_model():
-    return whisper.load_model("base")
+# Function to record audio
+def record_audio(duration=10, samplerate=44100):
+    global audio_data
+    print("Recording Started...")
 
-model = load_model()
+    # Record audio from the microphone
+    audio_data = sd.rec(int(duration * samplerate), samplerate=samplerate, channels=1, dtype='int16')
+    sd.wait()  # Wait until recording is finished
 
-# Audio frame processor
-class AudioProcessor:
-    def __init__(self):
-        self.recording = []
+    # Save audio to a file
+    wav.write(filename, samplerate, audio_data)  # Save as .wav file
+    print(f"Recording saved as {filename}")
 
-    def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
-        audio = frame.to_ndarray()
-        self.recording.append(audio)
-        return frame
+# Function to stop recording manually
+def stop_recording():
+    global is_recording
+    print("Recording Stopped")
+    sd.stop()
+    is_recording = False
 
-# Session state variables
-if "audio_data" not in st.session_state:
-    st.session_state.audio_data = None
-if "transcript" not in st.session_state:
-    st.session_state.transcript = None
-if "report" not in st.session_state:
-    st.session_state.report = None
-
-# Recording section
-st.header("🎤 Record Doctor-Patient Conversation")
-ctx = webrtc_streamer(
-    key="audio",
-    mode=WebRtcMode.SENDONLY,
-    in_audio=True,
-    client_settings=ClientSettings(
-        media_stream_constraints={"audio": True, "video": False},
-        rtc_configuration={"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]},
-    ),
-    audio_processor_factory=AudioProcessor,
-)
-
-# Save and process after recording ends
-if ctx and ctx.state.playing is False and ctx.audio_processor:
-    audio = np.concatenate(ctx.audio_processor.recording, axis=1)[0]  # Mono
-    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-        import soundfile as sf
-        sf.write(f.name, audio.T, 48000)
-        st.session_state.audio_data = f.name
-        st.success("✅ Recording saved. Ready to transcribe.")
-
-# Transcription section
-if st.session_state.audio_data:
-    if st.button("📝 Transcribe Audio"):
-        with st.spinner("Transcribing..."):
-            result = model.transcribe(st.session_state.audio_data)
-            st.session_state.transcript = result["text"]
-        st.success("✅ Transcription Complete")
-        st.text_area("📄 Transcript", st.session_state.transcript, height=200)
-
-# GenAI-based Report Generation using Gemma-3-27B
-def generate_report_with_genai(transcript):
-    prompt = f"""
-    You are a medical transcriptionist. Based on the following conversation between a doctor and a patient, create a well-structured medical report.
-    The report should include:
-    - A consultation summary.
-    - Doctor's notes (diagnosis, treatment, and follow-up).
-    - Any relevant medical instructions.
+# Function to transcribe audio using Google Generative AI
+def transcribe_audio(filename):
+    print("Transcribing the audio...")
     
-    Conversation:
-    {transcript}
-
-    Medical Report:
-    """
-
+    # Read the audio file and convert it to text
     try:
-        # Use GenAI's gemma-3-27b-it model to generate the report
-        model = genai.GenerativeModel("gemma-3-27b-it")
-        response = model.generate_content(prompt, max_tokens=1000, temperature=0.7)
-        report = response['content']
-        return report
+        with open(filename, 'rb') as audio_file:
+            audio_content = audio_file.read()
+        
+        # Call the generative model to transcribe (replace this with actual speech-to-text logic)
+        response = genai.GenerativeModel("gemma-3-27b-it").generate(
+            prompt=f"Please transcribe the following audio: {audio_content}",
+            max_output_tokens=1000
+        )
+        
+        transcription = response.result['text']
+        print(f"Transcription: {transcription}")
+        return transcription
+    
     except Exception as e:
-        return f"Error generating report: {e}"
+        print(f"Error in transcription: {e}")
+        return None
 
-# Report generation using GenAI's Gemma-3-27B model
-if st.session_state.transcript:
-    if st.button("📄 Generate Medical Report"):
-        report_text = generate_report_with_genai(st.session_state.transcript)
-        st.session_state.report = report_text
-        st.text_area("📝 Medical Report", report_text, height=300)
+# Function to generate the report based on transcription
+def generate_report(transcription):
+    print("Generating Medical Report...")
+    
+    # Create a simple medical report structure
+    report = f"""
+    Medical Report:
+    ----------------------
+    Doctor's Notes:
+    {transcription}
+    ----------------------
+    """
+    return report
 
-    if st.session_state.report:
-        # Save the report as a PDF
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        for line in st.session_state.report.split("\n"):
-            pdf.multi_cell(0, 10, line)
-        pdf_path = "report.pdf"
-        pdf.output(pdf_path)
+# UI Functions for Colab
+def start_recording(duration=10):
+    print("Starting recording...")
+    record_audio(duration=duration)
+    print("Recording complete.")
 
-        with open(pdf_path, "rb") as f:
-            st.download_button("📥 Download Report", f, file_name="medical_report.pdf")
+def stop_and_transcribe():
+    stop_recording()
+    transcription = transcribe_audio(filename)
+    
+    if transcription:
+        report = generate_report(transcription)
+        print(report)
+        
+        # Save report to a text file
+        with open("/content/medical_report.txt", 'w') as report_file:
+            report_file.write(report)
+        
+        print("Medical Report generated and saved as medical_report.txt.")
+        return report
+    else:
+        print("Transcription failed.")
+        return None
+
+# Example Usage in Colab
+# 1. Start recording
+start_recording(duration=10)
+
+# 2. Stop recording and transcribe
+report = stop_and_transcribe()
+
+# 3. Provide download link for the report
+if report:
+    from google.colab import files
+    files.download("/content/medical_report.txt")  # Download the report
