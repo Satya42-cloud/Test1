@@ -1,62 +1,134 @@
-# scribe_ai_app.py
-
 import streamlit as st
-import sounddevice as sd
-import numpy as np
-from scipy.io.wavfile import write
+import streamlit.components.v1 as components
 import tempfile
-import os
+import base64
 import whisper
-import google.generativeai as genai
+from fpdf import FPDF
 
-# Configure Gemini API key
-genai.configure(api_key="AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA")  # 🔁 Replace with your key
+# Title of the app
+st.title("🎤 Scribe AI - Record Audio")
 
-st.title("🩺 Scribe AI – Clinical Note Generator")
+# Step 1: Embed JavaScript Recorder in the Streamlit app
+st.markdown(
+    """
+    <script src="https://cdn.jsdelivr.net/npm/recorderjs"></script>
+    <script>
+        let recorder;
+        let audioBlob;
+        
+        function startRecording() {
+            let audioContext = new (window.AudioContext || window.webkitAudioContext)();
+            let stream = navigator.mediaDevices.getUserMedia({audio: true});
+            
+            stream.then(function(mediaStream) {
+                recorder = new Recorder(audioContext, {numChannels: 1});
+                recorder.initStream(mediaStream);
+                recorder.record();
+                document.getElementById('status').innerText = "Recording... Click 'Stop' when done.";
+            });
+        }
+        
+        function stopRecording() {
+            recorder.stop();
+            recorder.exportWAV(function(blob) {
+                audioBlob = blob;
+                let reader = new FileReader();
+                reader.onloadend = function() {
+                    let audioData = reader.result.split(',')[1];
+                    window.parent.postMessage({ type: 'audio', data: audioData }, "*");
+                };
+                reader.readAsDataURL(blob);
+                document.getElementById('status').innerText = "Recording stopped.";
+            });
+        }
+        
+        function downloadAudio() {
+            let link = document.createElement('a');
+            link.href = URL.createObjectURL(audioBlob);
+            link.download = "recorded_audio.wav";
+            link.click();
+        }
+    </script>
+    <button onclick="startRecording()">Start Recording</button>
+    <button onclick="stopRecording()">Stop Recording</button>
+    <button onclick="downloadAudio()">Download Audio</button>
+    <p id="status">Press "Start Recording" to begin.</p>
+    """,
+    unsafe_allow_html=True
+)
 
-# Record audio
-duration = st.slider("🎙️ Recording duration (seconds)", 3, 30, 10)
-fs = 44100
+# Step 2: Retrieve audio data and display
+audio_data = st.empty()
 
-if st.button("Start Recording"):
-    st.info("Recording in progress...")
-    audio = sd.rec(int(duration * fs), samplerate=fs, channels=1)
-    sd.wait()
-    st.success("Recording complete!")
+# To handle the audio data in Python (base64 encoding to save as a file)
+def audio_callback(data):
+    audio_data.audio(data, format="audio/wav")
 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as f:
-        write(f.name, fs, audio)
-        st.audio(f.name, format="audio/wav")
+# Step 3: Handle the message with the recorded audio
+def handle_message(message):
+    if message["type"] == "audio":
+        audio_base64 = message["data"]
+        audio_bytes = base64.b64decode(audio_base64)
+        
+        # Save to temp file and process it (transcription, etc.)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio_file:
+            tmp_audio_file.write(audio_bytes)
+            tmp_audio_file.close()
+            audio_callback(tmp_audio_file.name)
+            return tmp_audio_file.name
 
-        st.session_state.audio_path = f.name
+# Step 4: Setup listener for JavaScript messages
+components.html("""
+    <script>
+        window.addEventListener("message", function(event) {
+            if (event.data.type === 'audio') {
+                window.parent.postMessage(event.data, '*');
+            }
+        }, false);
+    </script>
+""", height=0)
 
-# Transcribe audio with Whisper
-if "audio_path" in st.session_state and st.button("Transcribe Audio"):
-    with st.spinner("Transcribing with Whisper..."):
-        model = whisper.load_model("base")
-        result = model.transcribe(st.session_state.audio_path)
-        transcript = result["text"]
-        st.session_state.transcript = transcript
-        st.text_area("📝 Transcript", transcript, height=200)
+st.write("Audio recorded will appear here once uploaded.")
 
-# Generate Clinical Note with Gemini
-if "transcript" in st.session_state and st.button("Generate Clinical Note"):
-    with st.spinner("Generating SOAP note..."):
-        prompt = f"""
-        You are a medical scribe. Based on this doctor-patient conversation transcript, generate a clinical SOAP note:
+# Step 5: Transcription using Whisper
+def transcribe_audio(audio_path):
+    model = whisper.load_model("base")
+    result = model.transcribe(audio_path)
+    return result["text"]
 
-        Transcript:
-        {st.session_state.transcript}
-
-        Format:
-        S: [Subjective - patient's complaints]
-        O: [Objective - doctor's observations]
-        A: [Assessment - diagnosis]
-        P: [Plan - treatment plan]
-
-        Structured SOAP Note:
-        """
-
-        gemini_model = genai.GenerativeModel("gemini-pro")
-        response = gemini_model.generate_content(prompt)
-        st.text_area("🧾 Clinical Note (SOAP Format)", response.text, height=300)
+# Step 6: Handle the audio file and transcribe
+if audio_data:
+    audio_path = handle_message({"type": "audio", "data": audio_data})
+    if audio_path:
+        st.write("Transcription Result:")
+        transcript = transcribe_audio(audio_path)
+        st.text_area("Transcript", transcript, height=300)
+        
+        # Step 7: Generate Report as PDF
+        if st.button("Generate Report"):
+            pdf = FPDF()
+            pdf.set_auto_page_break(auto=True, margin=15)
+            pdf.add_page()
+            
+            # Set title
+            pdf.set_font("Arial", "B", 16)
+            pdf.cell(200, 10, txt="Scribe AI - Transcription Report", ln=True, align='C')
+            
+            # Add Transcription text
+            pdf.ln(10)
+            pdf.set_font("Arial", size=12)
+            pdf.multi_cell(0, 10, txt="Transcription:\n\n" + transcript)
+            
+            # Save PDF to a temporary file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf_file:
+                pdf.output(tmp_pdf_file.name)
+                tmp_pdf_file.close()
+                
+                # Allow the user to download the PDF
+                with open(tmp_pdf_file.name, "rb") as file:
+                    st.download_button(
+                        label="Download Report",
+                        data=file,
+                        file_name="scribe_ai_report.pdf",
+                        mime="application/pdf"
+                    )
