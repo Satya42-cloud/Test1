@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
+from streamlit-webrtc import webrtc_streamer, WebRtcMode, ClientSettings
 import av
 import numpy as np
 import whisper
