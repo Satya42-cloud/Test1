@@ -5,7 +5,7 @@ import numpy as np
 import whisper
 import tempfile
 from fpdf import FPDF
-import genai  # Import GenAI library
+import google.generativeai as genai
 import os
 
 # Set up GenAI API key (replace with your key)
