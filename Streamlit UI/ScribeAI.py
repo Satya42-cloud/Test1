@@ -1,75 +1,83 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, AudioProcessorBase, WebRtcMode
+from streamlit_webrtc import webrtc_streamer, AudioProcessorBase
 import av
-import whisper
 import numpy as np
 import tempfile
+import whisper
 import os
-from fpdf import FPDF
-import soundfile as sf
+import google.generativeai as genai
 
-# Title
-st.set_page_config(page_title="Scribe AI", layout="centered")
-st.title("🎤 Scribe AI - Voice to Text Transcription")
+# Configure Gemini API key
+genai.configure(api_key="YOUR_GEMINI_API_KEY")  # Replace with your actual key
 
-# Load Whisper model only once
-@st.cache_resource
-def load_model():
-    return whisper.load_model("base")
+# Load Whisper model
+whisper_model = whisper.load_model("base")
 
-model = load_model()
-
-# Custom audio processor
-class AudioRecorder(AudioProcessorBase):
+# Audio Processor Class
+class AudioProcessor(AudioProcessorBase):
     def __init__(self):
         self.audio_frames = []
 
     def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
-        audio = frame.to_ndarray().flatten().astype(np.float32) / 32768.0
+        audio = frame.to_ndarray()
         self.audio_frames.append(audio)
         return frame
 
-# WebRTC audio streamer
+# Title
+st.title("🎤 Scribe AI - Record, Transcribe & Generate Report")
+
+# WebRTC streaming for audio capture
 ctx = webrtc_streamer(
     key="audio",
-    mode=WebRtcMode.SENDONLY,  # ✅ Correct enum usage
-    audio_receiver_size=256,
+    mode="sendonly",
+    in_audio=True,
+    audio_processor_factory=AudioProcessor,
     media_stream_constraints={"audio": True, "video": False},
-    audio_processor_factory=AudioRecorder,
-    async_processing=True,
 )
 
-# Transcription logic
-if ctx.audio_processor:
-    if st.button("🛑 Transcribe"):
+# Store audio after recording stops
+if ctx.audio_processor and ctx.audio_processor.audio_frames:
+    st.session_state.audio_data = np.concatenate(ctx.audio_processor.audio_frames, axis=0)
+
+# Transcription
+if "audio_data" in st.session_state:
+    if st.button("📝 Transcribe"):
         with st.spinner("Transcribing audio..."):
-            audio_data = np.concatenate(ctx.audio_processor.audio_frames, axis=0)
+            audio = st.session_state.audio_data.astype(np.float32)
+            temp_audio_path = tempfile.mktemp(suffix=".wav")
+            import soundfile as sf
+            sf.write(temp_audio_path, audio, 16000)
+            result = whisper_model.transcribe(temp_audio_path)
+            st.session_state.transcript = result["text"]
+            st.success("Transcription complete!")
 
-            # Save to temp WAV file
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-                sf.write(tmp_file.name, audio_data, 16000, format='WAV')
-                tmp_path = tmp_file.name
+# Show transcript
+if "transcript" in st.session_state:
+    st.subheader("🧾 Transcription")
+    st.text_area("Transcript", st.session_state.transcript, height=200)
 
-            # Transcribe
-            result = model.transcribe(tmp_path)
-            transcript = result["text"]
+    if st.button("📄 Generate Report"):
+        with st.spinner("Generating report using Gemini..."):
+            prompt = f"""
+            You are a professional note-taking assistant. Convert the following transcript into a well-organized summary:
+            ---
+            {st.session_state.transcript}
+            ---
+            Format it in bullet points or structured paragraphs.
+            """
+            model = genai.GenerativeModel("gemini-pro")
+            response = model.generate_content(prompt)
+            st.session_state.report = response.text.strip()
+            st.success("Report generated!")
 
-            # Display transcript
-            st.subheader("📝 Transcription:")
-            st.text_area("Transcript", transcript, height=300)
+# Show Report
+if "report" in st.session_state:
+    st.subheader("📝 Final Report")
+    st.text_area("Report", st.session_state.report, height=300)
 
-            # PDF Report
-            if st.button("📄 Generate PDF Report"):
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.set_font("Arial", "B", 16)
-                pdf.cell(200, 10, "Scribe AI - Transcription Report", ln=True, align="C")
-                pdf.ln(10)
-                pdf.set_font("Arial", size=12)
-                pdf.multi_cell(0, 10, transcript)
-
-                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as pdf_file:
-                    pdf.output(pdf_file.name)
-                    st.download_button("⬇️ Download Report", open(pdf_file.name, "rb"), file_name="ScribeAI_Report.pdf")
-
-            os.remove(tmp_path)
+    st.download_button(
+        label="📥 Download Report",
+        data=st.session_state.report,
+        file_name="scribe_ai_report.txt",
+        mime="text/plain"
+    )
