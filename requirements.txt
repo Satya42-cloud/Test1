@@ -1,6 +1,8 @@
-streamlit==1.33.0
-audiorecorder
+streamlit
+streamlit-webrtc
 whisper
-torch
+fpdf
+soundfile
+genai
 numpy
-google-generativeai
+av
