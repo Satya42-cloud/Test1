@@ -10,7 +10,7 @@ import whisper
 import google.generativeai as genai
 
 # Configure Gemini API key
-genai.configure(api_key="YOUR_GEMINI_API_KEY")  # 🔁 Replace with your key
+genai.configure(api_key="AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA")  # 🔁 Replace with your key
 
 st.title("🩺 Scribe AI – Clinical Note Generator")
 
