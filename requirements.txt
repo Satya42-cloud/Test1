@@ -1,7 +1,6 @@
 streamlit==1.33.0
-streamlit-webrtc==0.45.0
-numpy
-av
-soundfile
+audiorecorder
 whisper
+torch
+numpy
 google-generativeai
