@@ -7,4 +7,4 @@ numpy
 torch
 torchaudio
 ffmpeg-python
-
+fpdf
