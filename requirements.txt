@@ -1,10 +1,7 @@
 streamlit
-sounddevice
-scipy
+streamlit-webrtc
 openai-whisper
-google-generativeai
+ffmpeg-python
 numpy
 torch
-torchaudio
-ffmpeg-python
-fpdf
+
