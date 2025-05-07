@@ -1,64 +1,64 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, AudioProcessorBase
+from streamlit_webrtc import webrtc_streamer, AudioProcessorBase, WebRtcMode
 import av
 import whisper
 import numpy as np
 import tempfile
 import os
 from fpdf import FPDF
+import soundfile as sf
 
 # Title
+st.set_page_config(page_title="Scribe AI", layout="centered")
 st.title("🎤 Scribe AI - Voice to Text Transcription")
 
-# Initialize Whisper model
+# Load Whisper model only once
 @st.cache_resource
 def load_model():
     return whisper.load_model("base")
 
 model = load_model()
 
-# AudioProcessor for webrtc_streamer
+# Custom audio processor
 class AudioRecorder(AudioProcessorBase):
     def __init__(self):
         self.audio_frames = []
 
     def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
-        audio = frame.to_ndarray().flatten().astype(np.float32) / 32768.0  # Convert to float32
+        audio = frame.to_ndarray().flatten().astype(np.float32) / 32768.0
         self.audio_frames.append(audio)
         return frame
 
-# Start the WebRTC audio streamer
+# WebRTC audio streamer
 ctx = webrtc_streamer(
     key="audio",
-    mode="sendonly",
+    mode=WebRtcMode.SENDONLY,  # ✅ Correct enum usage
     audio_receiver_size=256,
     media_stream_constraints={"audio": True, "video": False},
     audio_processor_factory=AudioRecorder,
     async_processing=True,
 )
 
-# Process recorded audio
+# Transcription logic
 if ctx.audio_processor:
     if st.button("🛑 Transcribe"):
         with st.spinner("Transcribing audio..."):
-            # Concatenate audio frames
             audio_data = np.concatenate(ctx.audio_processor.audio_frames, axis=0)
 
-            # Save to WAV file
+            # Save to temp WAV file
             with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
-                import soundfile as sf
                 sf.write(tmp_file.name, audio_data, 16000, format='WAV')
                 tmp_path = tmp_file.name
 
-            # Transcribe using Whisper
+            # Transcribe
             result = model.transcribe(tmp_path)
             transcript = result["text"]
 
-            # Show transcript
+            # Display transcript
             st.subheader("📝 Transcription:")
             st.text_area("Transcript", transcript, height=300)
 
-            # Generate report
+            # PDF Report
             if st.button("📄 Generate PDF Report"):
                 pdf = FPDF()
                 pdf.add_page()
@@ -72,5 +72,4 @@ if ctx.audio_processor:
                     pdf.output(pdf_file.name)
                     st.download_button("⬇️ Download Report", open(pdf_file.name, "rb"), file_name="ScribeAI_Report.pdf")
 
-            # Clean up
             os.remove(tmp_path)
