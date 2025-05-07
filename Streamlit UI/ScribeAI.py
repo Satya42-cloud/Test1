@@ -1,6 +1,3 @@
-# Install necessary libraries
-!pip install streamlit whisper google-generativeai
-
 import streamlit as st
 import whisper
 import google.generativeai as genai
