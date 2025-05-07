@@ -68,7 +68,18 @@ def audio_callback(data):
 def handle_message(message):
     if message["type"] == "audio":
         audio_base64 = message["data"]
-        audio_bytes = base64.b64decode(audio_base64)
+        
+        # Debugging step: Check if the audio data is in base64 format
+        if not audio_base64 or not isinstance(audio_base64, str):
+            st.error("Received invalid audio data!")
+            return None
+
+        try:
+            # Decode the base64 audio
+            audio_bytes = base64.b64decode(audio_base64)
+        except Exception as e:
+            st.error(f"Error decoding base64 data: {e}")
+            return None
         
         # Save to temp file and process it (transcription, etc.)
         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_audio_file:
