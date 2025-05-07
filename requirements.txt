@@ -1,9 +1,7 @@
-streamlit
-streamlit-webrtc
-openai-whisper
-ffmpeg-python
-soundfile
+streamlit==1.33.0
+streamlit-webrtc==0.45.0
 numpy
-torch
 av
-fpdf
+whisper
+soundfile
+google-generativeai
