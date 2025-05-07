@@ -9,7 +9,7 @@ import soundfile as sf
 import google.generativeai as genai
 
 # 👉 Configure your Gemini API key
-genai.configure(api_key="YOUR_GEMINI_API_KEY")  # Replace this with your actual Gemini API key
+genai.configure(api_key="AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA")  # Replace this with your actual Gemini API key
 
 # Load Whisper model
 whisper_model = whisper.load_model("base")
