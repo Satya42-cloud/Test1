@@ -1,5 +1,5 @@
 import streamlit as st
-from streamlit-webrtc import webrtc_streamer, WebRtcMode, ClientSettings
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, ClientSettings
 import av
 import numpy as np
 import whisper
@@ -9,7 +9,7 @@ import google.generativeai as genai
 import os
 
 # Set up GenAI API key (replace with your key)
-genai.api_key = "your_genai_api_key_here"
+genai.api_key = "AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA"
 
 st.set_page_config(page_title="Scribe AI", layout="centered")
 st.title("🩺 Scribe AI - Doctor-Patient Transcription")
