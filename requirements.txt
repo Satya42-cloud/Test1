@@ -1,4 +1,10 @@
 streamlit
-pandas
-yagmail
-reportlab
+sounddevice
+scipy
+openai-whisper
+google-generativeai
+numpy
+torch
+torchaudio
+ffmpeg-python
+
