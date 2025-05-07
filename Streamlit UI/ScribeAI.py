@@ -1,70 +1,51 @@
 import streamlit as st
-from streamlit_webrtc import webrtc_streamer, WebRtcMode, AudioProcessorBase
-import av
-import numpy as np
-import tempfile
+from audiorecorder import audiorecorder
 import whisper
-import os
-import soundfile as sf
+import tempfile
 import google.generativeai as genai
 
-# 👉 Configure your Gemini API key
-genai.configure(api_key="AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA")  # Replace this with your actual Gemini API key
+# Set Gemini API key
+genai.configure(api_key="AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA")  # Replace with your actual Gemini API key
 
 # Load Whisper model
 whisper_model = whisper.load_model("base")
 
-# Audio Processor for recording
-class AudioProcessor(AudioProcessorBase):
-    def __init__(self):
-        self.frames = []
+st.title("🎤 Scribe AI - Record, Transcribe, and Report")
 
-    def recv(self, frame: av.AudioFrame) -> av.AudioFrame:
-        audio = frame.to_ndarray()
-        self.frames.append(audio)
-        return frame
+# Record audio
+st.header("🎙️ Step 1: Record Your Voice")
+audio = audiorecorder("Start Recording", "Stop Recording")
 
-# Streamlit UI
-st.title("🎤 Scribe AI - Record, Transcribe & Report")
+if len(audio) > 0:
+    st.audio(audio.tobytes(), format="audio/wav")
 
-ctx = webrtc_streamer(
-    key="scribe",
-    mode=WebRtcMode.SENDONLY,
-    in_audio=True,
-    audio_processor_factory=AudioProcessor,
-    media_stream_constraints={"audio": True, "video": False},
-)
+    # Save audio to temporary file
+    with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+        f.write(audio.tobytes())
+        audio_path = f.name
 
-# Capture and store audio after stopping
-if ctx.state.playing:
-    st.info("🎙️ Recording... Speak now.")
-elif ctx.audio_processor and ctx.audio_processor.frames:
-    audio_data = np.concatenate(ctx.audio_processor.frames, axis=0)
-    temp_audio_path = tempfile.mktemp(suffix=".wav")
-    sf.write(temp_audio_path, audio_data, 16000)
-    st.success("✅ Audio recording captured!")
-
+    # Transcribe button
     if st.button("📝 Transcribe"):
-        with st.spinner("Transcribing audio..."):
-            result = whisper_model.transcribe(temp_audio_path)
+        with st.spinner("Transcribing..."):
+            result = whisper_model.transcribe(audio_path)
             transcript = result["text"]
             st.session_state.transcript = transcript
-            st.success("Transcription complete!")
+            st.success("✅ Transcription Complete")
             st.text_area("🧾 Transcript", transcript, height=200)
 
-# Generate report
+# Report generation
 if "transcript" in st.session_state:
-    if st.button("📄 Generate Report"):
-        with st.spinner("Generating report with Gemini..."):
+    st.header("📄 Step 2: Generate Report")
+    if st.button("Generate Report"):
+        with st.spinner("Generating report using Gemini..."):
             prompt = f"""
-            Summarize the following transcription in a professional report format:
+            Summarize this patient-doctor audio conversation into a clean, professional medical report:
             {st.session_state.transcript}
             """
             model = genai.GenerativeModel("gemini-pro")
             response = model.generate_content(prompt)
             report = response.text.strip()
             st.session_state.report = report
-            st.success("Report generated!")
-            st.text_area("📝 Final Report", report, height=300)
-
-            st.download_button("📥 Download Report", data=report, file_name="scribe_report.txt", mime="text/plain")
+            st.success("✅ Report Generated")
+            st.text_area("📋 Final Report", report, height=300)
+            st.download_button("📥 Download Report", data=report, file_name="Scribe_Report.txt", mime="text/plain")
