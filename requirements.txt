@@ -1,6 +1,5 @@
-sounddevice
-numpy
-scipy
+streamlit
+streamlit-webrtc
 google-generativeai
-pydub
+tempfile
 
