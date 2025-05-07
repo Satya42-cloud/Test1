@@ -3,6 +3,6 @@ streamlit-webrtc
 whisper
 fpdf
 soundfile
-genai
+google-generativeai
 numpy
 av
