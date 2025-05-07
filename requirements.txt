@@ -1,4 +1,8 @@
-streamlit
 sounddevice
 numpy
+scipy
 google-generativeai
+openai-whisper
+faster-whisper
+SpeechRecognition
+pydub
