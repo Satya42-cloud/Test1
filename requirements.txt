@@ -5,6 +5,7 @@ git+https://github.com/openai/whisper.git
 google-generativeai
 azure-storage-file-datalake
 fpdf
-ffmpeg-python
+subprocess
+shutil
 
 
