@@ -1,7 +1,9 @@
 import streamlit as st
-import whisper
 import os
 import tempfile
+import whisper
+import torch
+import ffmpeg
 import google.generativeai as genai
 from azure.storage.filedatalake import DataLakeServiceClient
 from fpdf import FPDF
@@ -17,15 +19,13 @@ AZURE_FILESYSTEM_NAME = "insurance"
 AZURE_DIRECTORY = "audio_uploads"
 
 # ----------------------------
-# INITIALIZE API
+# INITIALIZE GOOGLE API
 # ----------------------------
-
 genai.configure(api_key=GOOGLE_API_KEY)
 
 # ----------------------------
-# FUNCTION: Upload to Azure ADLS
+# Upload to Azure ADLS
 # ----------------------------
-
 def upload_to_adls(file_path, file_name):
     try:
         service_client = DataLakeServiceClient(
@@ -45,45 +45,50 @@ def upload_to_adls(file_path, file_name):
         st.error(f"❌ Azure upload failed: {e}")
 
 # ----------------------------
-# FUNCTION: Transcribe Audio
+# Transcribe Audio using Whisper
 # ----------------------------
-
 def transcribe_audio(audio_path):
-    model = whisper.load_model("base")
-    result = model.transcribe(audio_path)
-    return result['text']
+    try:
+        model = whisper.load_model("base")  # Use 'base' model
+        result = model.transcribe(audio_path)
+        return result['text']
+    except Exception as e:
+        st.error(f"❌ Transcription failed: {e}")
+        return ""
 
 # ----------------------------
-# FUNCTION: Generate Report
+# Generate Medical Report using Gemini
 # ----------------------------
-
 def generate_report(transcription):
-    model = genai.GenerativeModel("gemini-pro")
-    prompt = f"""
-    You are a clinical documentation assistant. Convert the following doctor-patient conversation
-    into a structured medical report with the following sections:
+    try:
+        model = genai.GenerativeModel("gemini-pro")
+        prompt = f"""
+        You are a clinical documentation assistant. Convert the following doctor-patient conversation
+        into a structured medical report with the following sections:
 
-    - Chief Complaint
-    - History of Present Illness
-    - Past Medical History
-    - Medications
-    - Allergies
-    - Family History
-    - Social History
-    - Review of Systems
-    - Physical Exam Plan
-    - Impression / Next Steps
+        - Chief Complaint
+        - History of Present Illness
+        - Past Medical History
+        - Medications
+        - Allergies
+        - Family History
+        - Social History
+        - Review of Systems
+        - Physical Exam Plan
+        - Impression / Next Steps
 
-    Conversation:
-    \"\"\"{transcription}\"\"\"
-    """
-    response = model.generate_content(prompt)
-    return response.text
+        Conversation:
+        \"\"\"{transcription}\"\"\"
+        """
+        response = model.generate_content(prompt)
+        return response.text
+    except Exception as e:
+        st.error(f"❌ Report generation failed: {e}")
+        return ""
 
 # ----------------------------
-# FUNCTION: Generate PDF
+# Generate PDF from Report
 # ----------------------------
-
 def generate_pdf(report_text):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -98,10 +103,10 @@ def generate_pdf(report_text):
 # ----------------------------
 # STREAMLIT APP
 # ----------------------------
+st.set_page_config(page_title="Medical Audio Assistant", page_icon="🩺")
+st.title("🩺 Medical Audio Assistant")
 
-st.title("🏥 Medical Audio Assistant")
-
-uploaded_file = st.file_uploader("Upload an audio file", type=["wav", "mp3", "m4a"])
+uploaded_file = st.file_uploader("📤 Upload an audio file", type=["wav", "mp3", "m4a"])
 
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=uploaded_file.name) as tmp_file:
@@ -111,40 +116,41 @@ if uploaded_file is not None:
     # Upload to ADLS Gen2
     upload_to_adls(audio_path, uploaded_file.name)
 
-    # Ask user what to do
+    # Chat-style interface
     user_prompt = st.text_input("💬 What do you want me to do?")
 
     if user_prompt:
         if "text" in user_prompt.lower():
-            with st.spinner("Transcribing..."):
+            with st.spinner("🧠 Transcribing audio..."):
                 transcript = transcribe_audio(audio_path)
-                st.subheader("📝 Transcript")
-                st.write(transcript)
-                st.session_state.transcript = transcript
+                if transcript:
+                    st.subheader("📝 Transcript")
+                    st.write(transcript)
+                    st.session_state.transcript = transcript
 
         elif "report" in user_prompt.lower():
             if "transcript" not in st.session_state:
                 st.warning("Please transcribe the audio first.")
             else:
-                with st.spinner("Generating report..."):
+                with st.spinner("📄 Generating medical report..."):
                     report = generate_report(st.session_state.transcript)
-                    st.subheader("📄 Medical Report")
-                    st.text_area("Generated Report", report, height=300)
-                    st.session_state.report = report
+                    if report:
+                        st.subheader("🧾 Medical Report")
+                        st.text_area("Generated Report", report, height=300)
+                        st.session_state.report = report
 
         elif "pdf" in user_prompt.lower():
             if "report" not in st.session_state:
                 st.warning("Please generate the report first.")
             else:
-                with st.spinner("Generating PDF..."):
+                with st.spinner("📄 Creating PDF..."):
                     pdf_path = generate_pdf(st.session_state.report)
                     with open(pdf_path, "rb") as f:
                         st.download_button(
                             label="📥 Download PDF",
                             data=f,
                             file_name="medical_report.pdf",
-                            mime="application/pdf",
+                            mime="application/pdf"
                         )
-
         else:
-            st.info("Try: 'convert to text', 'generate report', or 'give me PDF'.")
+            st.info("Try commands like: 'convert to text', 'generate report', or 'give me PDF'.")
