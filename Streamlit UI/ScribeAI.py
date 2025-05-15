@@ -1,9 +1,9 @@
 import streamlit as st
 import os
 import tempfile
+import shutil
 import whisper
-import torch
-import ffmpeg
+import subprocess
 import google.generativeai as genai
 from azure.storage.filedatalake import DataLakeServiceClient
 from fpdf import FPDF
@@ -22,6 +22,12 @@ AZURE_DIRECTORY = "audio_uploads"
 # INITIALIZE GOOGLE API
 # ----------------------------
 genai.configure(api_key=GOOGLE_API_KEY)
+
+# ----------------------------
+# Utility: Check if ffmpeg is installed
+# ----------------------------
+def is_ffmpeg_installed():
+    return shutil.which("ffmpeg") is not None
 
 # ----------------------------
 # Upload to Azure ADLS
@@ -48,8 +54,12 @@ def upload_to_adls(file_path, file_name):
 # Transcribe Audio using Whisper
 # ----------------------------
 def transcribe_audio(audio_path):
+    if not is_ffmpeg_installed():
+        st.error("❌ FFmpeg is not installed. Please install it to enable transcription.")
+        return ""
+
     try:
-        model = whisper.load_model("base")  # Use 'base' model
+        model = whisper.load_model("base")
         result = model.transcribe(audio_path)
         return result['text']
     except Exception as e:
@@ -113,10 +123,8 @@ if uploaded_file is not None:
         tmp_file.write(uploaded_file.read())
         audio_path = tmp_file.name
 
-    # Upload to ADLS Gen2
     upload_to_adls(audio_path, uploaded_file.name)
 
-    # Chat-style interface
     user_prompt = st.text_input("💬 What do you want me to do?")
 
     if user_prompt:
