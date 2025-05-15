@@ -5,3 +5,4 @@ azure-storage-file-datalake
 fpdf
 ffmpeg
 torch
+soundfile
