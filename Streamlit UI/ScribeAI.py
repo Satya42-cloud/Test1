@@ -7,7 +7,7 @@ from azure.storage.filedatalake import DataLakeServiceClient
 from fpdf import FPDF
 
 # ----------------------------
-# HARD-CODED CONFIGURATION
+# CONFIG
 # ----------------------------
 
 GOOGLE_API_KEY = "AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA"
@@ -21,6 +21,7 @@ genai.configure(api_key=GOOGLE_API_KEY)
 # ----------------------------
 # Upload to Azure ADLS
 # ----------------------------
+
 def upload_to_adls(file_path, file_name):
     try:
         service_client = DataLakeServiceClient(
@@ -40,13 +41,14 @@ def upload_to_adls(file_path, file_name):
         st.error(f"❌ Azure upload failed: {e}")
 
 # ----------------------------
-# Transcribe Audio (WAV only, no ffmpeg)
+# Transcribe WAV Audio (No ffmpeg)
 # ----------------------------
+
 def transcribe_audio(audio_path):
     try:
         model = whisper.load_model("base")
         result = model.transcribe(audio_path)
-        return result['text']
+        return result["text"]
     except Exception as e:
         st.error(f"❌ Transcription failed: {e}")
         return ""
@@ -54,6 +56,7 @@ def transcribe_audio(audio_path):
 # ----------------------------
 # Generate Medical Report
 # ----------------------------
+
 def generate_report(transcription):
     try:
         model = genai.GenerativeModel("gemini-pro")
@@ -82,8 +85,9 @@ def generate_report(transcription):
         return ""
 
 # ----------------------------
-# Generate PDF
+# Generate PDF from Report
 # ----------------------------
+
 def generate_pdf(report_text):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -96,12 +100,13 @@ def generate_pdf(report_text):
     return pdf_path
 
 # ----------------------------
-# STREAMLIT UI
+# Streamlit UI
 # ----------------------------
+
 st.set_page_config(page_title="Medical Audio Assistant", page_icon="🩺")
 st.title("🩺 Medical Audio Assistant")
 
-uploaded_file = st.file_uploader("📤 Upload a WAV audio file", type=["wav"])
+uploaded_file = st.file_uploader("📤 Upload a WAV audio file (PCM 16-bit format)", type=["wav"])
 
 if uploaded_file is not None:
     with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
