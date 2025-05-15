@@ -1,9 +1,7 @@
 import streamlit as st
 import os
 import tempfile
-import shutil
 import whisper
-import subprocess
 import google.generativeai as genai
 from azure.storage.filedatalake import DataLakeServiceClient
 from fpdf import FPDF
@@ -18,16 +16,7 @@ AZURE_STORAGE_ACCOUNT_KEY = "81nZ6FOa+hiXdkA8pEHb7MHJNF5Go4YamjNZweJloFIAMIz7qeI
 AZURE_FILESYSTEM_NAME = "insurance"
 AZURE_DIRECTORY = "audio_uploads"
 
-# ----------------------------
-# INITIALIZE GOOGLE API
-# ----------------------------
 genai.configure(api_key=GOOGLE_API_KEY)
-
-# ----------------------------
-# Utility: Check if ffmpeg is installed
-# ----------------------------
-def is_ffmpeg_installed():
-    return shutil.which("ffmpeg") is not None
 
 # ----------------------------
 # Upload to Azure ADLS
@@ -43,21 +32,17 @@ def upload_to_adls(file_path, file_name):
         file_client = directory_client.create_file(file_name)
 
         with open(file_path, "rb") as f:
-            file_contents = f.read()
-        file_client.append_data(data=file_contents, offset=0, length=len(file_contents))
-        file_client.flush_data(len(file_contents))
+            data = f.read()
+        file_client.append_data(data=data, offset=0, length=len(data))
+        file_client.flush_data(len(data))
         st.success("✅ Uploaded to Azure Data Lake.")
     except Exception as e:
         st.error(f"❌ Azure upload failed: {e}")
 
 # ----------------------------
-# Transcribe Audio using Whisper
+# Transcribe Audio (WAV only, no ffmpeg)
 # ----------------------------
 def transcribe_audio(audio_path):
-    if not is_ffmpeg_installed():
-        st.error("❌ FFmpeg is not installed. Please install it to enable transcription.")
-        return ""
-
     try:
         model = whisper.load_model("base")
         result = model.transcribe(audio_path)
@@ -67,7 +52,7 @@ def transcribe_audio(audio_path):
         return ""
 
 # ----------------------------
-# Generate Medical Report using Gemini
+# Generate Medical Report
 # ----------------------------
 def generate_report(transcription):
     try:
@@ -97,7 +82,7 @@ def generate_report(transcription):
         return ""
 
 # ----------------------------
-# Generate PDF from Report
+# Generate PDF
 # ----------------------------
 def generate_pdf(report_text):
     pdf = FPDF()
@@ -106,20 +91,20 @@ def generate_pdf(report_text):
     pdf.set_font("Arial", size=12)
     for line in report_text.split('\n'):
         pdf.multi_cell(0, 10, line)
-    pdf_output_path = os.path.join(tempfile.gettempdir(), "medical_report.pdf")
-    pdf.output(pdf_output_path)
-    return pdf_output_path
+    pdf_path = os.path.join(tempfile.gettempdir(), "medical_report.pdf")
+    pdf.output(pdf_path)
+    return pdf_path
 
 # ----------------------------
-# STREAMLIT APP
+# STREAMLIT UI
 # ----------------------------
 st.set_page_config(page_title="Medical Audio Assistant", page_icon="🩺")
 st.title("🩺 Medical Audio Assistant")
 
-uploaded_file = st.file_uploader("📤 Upload an audio file", type=["wav", "mp3", "m4a"])
+uploaded_file = st.file_uploader("📤 Upload a WAV audio file", type=["wav"])
 
 if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=uploaded_file.name) as tmp_file:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_file:
         tmp_file.write(uploaded_file.read())
         audio_path = tmp_file.name
 
