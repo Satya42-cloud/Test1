@@ -44,14 +44,20 @@ def upload_to_adls(file_path, file_name):
 # Transcribe WAV Audio (No ffmpeg)
 # ----------------------------
 
-def transcribe_audio(audio_path):
-    try:
-        model = whisper.load_model("base")
-        result = model.transcribe(audio_path)
-        return result["text"]
-    except Exception as e:
-        st.error(f"❌ Transcription failed: {e}")
-        return ""
+import whisper
+import soundfile as sf
+
+def transcribe_without_ffmpeg(wav_path):
+    model = whisper.load_model("base")
+    audio, sr = sf.read(wav_path)
+    # Whisper expects 16kHz audio
+    if sr != 16000:
+        import numpy as np
+        from scipy.signal import resample
+        audio = resample(audio, int(len(audio) * 16000 / sr))
+    result = model.transcribe(audio, language='en', fp16=False)  # pass np array directly
+    return result["text"]
+
 
 # ----------------------------
 # Generate Medical Report
