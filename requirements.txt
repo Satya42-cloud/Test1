@@ -3,4 +3,5 @@ openai-whisper
 google-generativeai
 azure-storage-file-datalake
 fpdf
+ffmpeg
 torch
