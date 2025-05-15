@@ -1,69 +1,150 @@
 import streamlit as st
 import whisper
-import google.generativeai as genai
-import tempfile
 import os
-import wave
-import numpy as np
-import sounddevice as sd
+import tempfile
+import google.generativeai as genai
+from azure.storage.filedatalake import DataLakeServiceClient
+from fpdf import FPDF
 
-# Initialize Whisper model for transcription
-whisper_model = whisper.load_model("base")
+# ----------------------------
+# HARD-CODED CONFIGURATION
+# ----------------------------
 
-# Set up the Google Generative AI model (replace 'your-api-key' with your actual key)
-genai.api_key = 'AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA'  # Make sure to replace with your actual API key
+GOOGLE_API_KEY = "AIzaSyBg_0TJ_miX2UHYFjxNp9nH7EYGi9LiOJA"
+AZURE_STORAGE_ACCOUNT_NAME = "aitoolschatbotssa"
+AZURE_STORAGE_ACCOUNT_KEY = "81nZ6FOa+hiXdkA8pEHb7MHJNF5Go4YamjNZweJloFIAMIz7qeIhXVYBrFwvcGR54iZoqKVKXmPe+AStkYbedA=="
+AZURE_FILESYSTEM_NAME = "insurance"
+AZURE_DIRECTORY = "audio_uploads"
 
-# Function to record audio
-def record_audio():
-    st.write("Recording... Please speak into the microphone.")
-    samplerate = 44100  # Sampling rate (samples per second)
-    duration = 30  # Duration of the recording in seconds
-    recording = sd.rec(int(samplerate * duration), samplerate=samplerate, channels=2, dtype='int16')
-    sd.wait()  # Wait until recording is finished
-    return recording, samplerate
+# ----------------------------
+# INITIALIZE API
+# ----------------------------
 
-# Function to save the recorded audio to a temporary file
-def save_audio(recording, samplerate):
-    temp_wav_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
-    with wave.open(temp_wav_file.name, "wb") as wf:
-        wf.setnchannels(2)
-        wf.setsampwidth(2)  # 2 bytes per sample
-        wf.setframerate(samplerate)
-        wf.writeframes(recording)
-    return temp_wav_file.name
+genai.configure(api_key=GOOGLE_API_KEY)
 
-# Function to transcribe audio
+# ----------------------------
+# FUNCTION: Upload to Azure ADLS
+# ----------------------------
+
+def upload_to_adls(file_path, file_name):
+    try:
+        service_client = DataLakeServiceClient(
+            account_url=f"https://{AZURE_STORAGE_ACCOUNT_NAME}.dfs.core.windows.net",
+            credential=AZURE_STORAGE_ACCOUNT_KEY,
+        )
+        file_system_client = service_client.get_file_system_client(file_system=AZURE_FILESYSTEM_NAME)
+        directory_client = file_system_client.get_directory_client(AZURE_DIRECTORY)
+        file_client = directory_client.create_file(file_name)
+
+        with open(file_path, "rb") as f:
+            file_contents = f.read()
+        file_client.append_data(data=file_contents, offset=0, length=len(file_contents))
+        file_client.flush_data(len(file_contents))
+        st.success("✅ Uploaded to Azure Data Lake.")
+    except Exception as e:
+        st.error(f"❌ Azure upload failed: {e}")
+
+# ----------------------------
+# FUNCTION: Transcribe Audio
+# ----------------------------
+
 def transcribe_audio(audio_path):
-    result = whisper_model.transcribe(audio_path)
+    model = whisper.load_model("base")
+    result = model.transcribe(audio_path)
     return result['text']
 
-# Function to generate medical report using LLM (Google AI Model)
-def generate_medical_report(transcript):
-    response = genai.GenerativeModel("gemma-3-27b-it").predict(
-        f"Generate a structured medical report based on the following conversation:\n\n{transcript}"
-    )
-    return response.result
+# ----------------------------
+# FUNCTION: Generate Report
+# ----------------------------
 
-# Streamlit interface
-st.title("🩺 Scribe AI - Doctor-Patient Conversation Recorder")
+def generate_report(transcription):
+    model = genai.GenerativeModel("gemini-pro")
+    prompt = f"""
+    You are a clinical documentation assistant. Convert the following doctor-patient conversation
+    into a structured medical report with the following sections:
 
-# Button to start recording
-if st.button("Start Recording"):
-    recording, samplerate = record_audio()
-    audio_path = save_audio(recording, samplerate)
-    st.audio(audio_path)  # Play the recorded audio for confirmation
-    st.success("Recording finished!")
+    - Chief Complaint
+    - History of Present Illness
+    - Past Medical History
+    - Medications
+    - Allergies
+    - Family History
+    - Social History
+    - Review of Systems
+    - Physical Exam Plan
+    - Impression / Next Steps
 
-    # Transcribe the audio and generate report
-    transcript = transcribe_audio(audio_path)
-    st.subheader("📜 Transcript")
-    st.write(transcript)
+    Conversation:
+    \"\"\"{transcription}\"\"\"
+    """
+    response = model.generate_content(prompt)
+    return response.text
 
-    # Generate medical report from the transcription
-    st.subheader("📄 Generated Medical Report")
-    report = generate_medical_report(transcript)
-    st.write(report)
+# ----------------------------
+# FUNCTION: Generate PDF
+# ----------------------------
 
-    # Option to download the transcript and report
-    st.download_button("Download Transcript", transcript, file_name="transcript.txt")
-    st.download_button("Download Medical Report", report, file_name="medical_report.txt")
+def generate_pdf(report_text):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    for line in report_text.split('\n'):
+        pdf.multi_cell(0, 10, line)
+    pdf_output_path = os.path.join(tempfile.gettempdir(), "medical_report.pdf")
+    pdf.output(pdf_output_path)
+    return pdf_output_path
+
+# ----------------------------
+# STREAMLIT APP
+# ----------------------------
+
+st.title("🏥 Medical Audio Assistant")
+
+uploaded_file = st.file_uploader("Upload an audio file", type=["wav", "mp3", "m4a"])
+
+if uploaded_file is not None:
+    with tempfile.NamedTemporaryFile(delete=False, suffix=uploaded_file.name) as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        audio_path = tmp_file.name
+
+    # Upload to ADLS Gen2
+    upload_to_adls(audio_path, uploaded_file.name)
+
+    # Ask user what to do
+    user_prompt = st.text_input("💬 What do you want me to do?")
+
+    if user_prompt:
+        if "text" in user_prompt.lower():
+            with st.spinner("Transcribing..."):
+                transcript = transcribe_audio(audio_path)
+                st.subheader("📝 Transcript")
+                st.write(transcript)
+                st.session_state.transcript = transcript
+
+        elif "report" in user_prompt.lower():
+            if "transcript" not in st.session_state:
+                st.warning("Please transcribe the audio first.")
+            else:
+                with st.spinner("Generating report..."):
+                    report = generate_report(st.session_state.transcript)
+                    st.subheader("📄 Medical Report")
+                    st.text_area("Generated Report", report, height=300)
+                    st.session_state.report = report
+
+        elif "pdf" in user_prompt.lower():
+            if "report" not in st.session_state:
+                st.warning("Please generate the report first.")
+            else:
+                with st.spinner("Generating PDF..."):
+                    pdf_path = generate_pdf(st.session_state.report)
+                    with open(pdf_path, "rb") as f:
+                        st.download_button(
+                            label="📥 Download PDF",
+                            data=f,
+                            file_name="medical_report.pdf",
+                            mime="application/pdf",
+                        )
+
+        else:
+            st.info("Try: 'convert to text', 'generate report', or 'give me PDF'.")
